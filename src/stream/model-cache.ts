@@ -12,13 +12,13 @@
  * `parameters`, `requestedModelId` and `requiresMaxMode`, none of which survive
  * the conversion to pi's model format.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 import { cacheFilePath } from "../utils/cache-dir.js";
 import type { CursorParameterizedModel } from "../client/cursor-wire.js";
 import type { CursorModel } from "./model-discovery.js";
 
-const CACHE_FILE = "model-catalog.json";
+const CACHE_FILE = "models.json";
 const CACHE_VERSION = 1;
 
 /** Discard a persisted catalog older than this rather than serving something ancient. */
@@ -89,6 +89,7 @@ export function writeCachedCatalog(entry: {
   if (!path) return;
   try {
     writeFileSync(path, JSON.stringify(catalog), { mode: 0o600 });
+    chmodSync(path, 0o600);
   } catch {
     // Best effort: an unwritable cache only costs the next launch a refresh.
   }

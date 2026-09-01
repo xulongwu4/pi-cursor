@@ -68,7 +68,7 @@ export const CURSOR_NATIVE_API = ProviderConstant.NativeApi;
 
 // ── Extension entry point ──
 
-export default async function (pi: ExtensionAPI): Promise<void> {
+export default function (pi: ExtensionAPI): void {
   let currentToken = "";
   let currentTokenSource: CredentialSource = CredentialSource.None;
   let lastRegisteredModels: ProcessedModel[] = [];
@@ -163,6 +163,24 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   // the background and updates an open /model selector with the live list.
   const startupCatalog = loadStartupCatalog();
   providerManager.registerModels(startupCatalog.rawModels, startupCatalog.parameterizedModels);
+
+  // Start live discovery after the session is usable, without making startup wait
+  // for credentials or the network. The registry publishes the returned list.
+  pi.on("session_start", (_event, ctx) => {
+    void ctx.modelRegistry
+      .refresh({ providers: [ProviderConstant.ProviderId] })
+      .then((result) => {
+        const error = result.errors.get(ProviderConstant.ProviderId);
+        if (error) {
+          debugExtensionLog("model_discovery.background.failed", { message: error.message });
+        }
+      })
+      .catch((error) => {
+        debugExtensionLog("model_discovery.background.failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+  });
 
   registerCursorCommands(pi, {
     getAccessToken,

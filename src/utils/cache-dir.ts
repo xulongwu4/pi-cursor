@@ -1,11 +1,11 @@
 /**
  * On-disk cache location for cross-process state (model catalog, refresh
- * back-off). Kept out of the pi config dir: everything here is derived data
- * that can be deleted at any time without losing user configuration.
+ * back-off). Everything here is derived data that can be deleted at any time
+ * without losing user configuration.
  */
 import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { join as pathJoin } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 let cachedDir: string | undefined;
 
@@ -13,9 +13,7 @@ let cachedDir: string | undefined;
 export function getCacheDir(): string | undefined {
   if (cachedDir !== undefined) return cachedDir || undefined;
   const configured = process.env.PI_CURSOR_CACHE_DIR?.trim();
-  const base =
-    configured ||
-    pathJoin(process.env.XDG_CACHE_HOME?.trim() || pathJoin(homedir(), ".cache"), "pi-cursor");
+  const base = configured || pathJoin(getAgentDir(), "cursor");
   try {
     mkdirSync(base, { recursive: true, mode: 0o700 });
     cachedDir = base;

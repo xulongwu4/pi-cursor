@@ -146,7 +146,7 @@ export function makeHeartbeatBytes(): Uint8Array {
 export function startBridge(
   accessToken: string,
   requestBytes: Uint8Array,
-  options?: { bridgeKey?: string },
+  options?: { bridgeKey?: string; url?: string },
 ) {
   const reused = options?.bridgeKey ? takeIdleBridge(options.bridgeKey) : undefined;
   let bridge;
@@ -159,7 +159,7 @@ export function startBridge(
     bridge = bridgeFactory({
       accessToken,
       rpcPath: "/agent.v1.AgentService/Run",
-      url: getCursorAgentUrl(),
+      url: options?.url ?? getCursorAgentUrl(),
       persistent: true,
       connectTimeoutMs: resolveH2ConnectTimeoutMs(process.env.PI_CURSOR_H2_CONNECT_TIMEOUT_MS),
       idleTimeoutMs: resolveH2IdleTimeoutMs(process.env.PI_CURSOR_H2_IDLE_TIMEOUT_MS),

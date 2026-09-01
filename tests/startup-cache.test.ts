@@ -2,11 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { RefreshModelsContext } from "@earendil-works/pi-ai";
 import { unregisterApiProviders } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ProviderConfig } from "@earendil-works/pi-coding-agent";
 
-import cursorExtension from "../src/index.js";
+import cursorExtension, { FALLBACK_MODELS } from "../src/index.js";
 
 import {
   isRefreshKnownBad,
@@ -22,6 +21,7 @@ import {
 import { resetCacheDirForTests } from "../src/utils/cache-dir.js";
 import type { CursorParameterizedModel } from "../src/client/cursor-wire.js";
 import type { CursorModel } from "../src/stream/model-discovery.js";
+import { loadStartupCatalog } from "../src/extension/provider.js";
 
 let cacheDir: string;
 
@@ -36,6 +36,7 @@ beforeEach(() => {
 afterEach(() => {
   unregisterApiProviders("@rahularya01/pi-cursor");
   delete process.env.PI_CURSOR_CACHE_DIR;
+  delete process.env.PI_CODING_AGENT_DIR;
   resetCacheDirForTests();
   resetRefreshGuardForTests();
   resetCatalogCacheForTests();
@@ -103,8 +104,20 @@ describe("model catalog cache", () => {
     expect(cached?.tokenHash).toBe("abc123");
   });
 
-  it("returns undefined when nothing is cached", () => {
+  it("uses the bundled model list when nothing is cached", () => {
     expect(readCachedCatalog()).toBeUndefined();
+    expect(loadStartupCatalog().rawModels).toEqual(FALLBACK_MODELS);
+  });
+
+  it("defaults the cache to getAgentDir()/cursor/models.json", () => {
+    delete process.env.PI_CURSOR_CACHE_DIR;
+    process.env.PI_CODING_AGENT_DIR = cacheDir;
+    resetCacheDirForTests();
+
+    writeCachedCatalog({ tokenHash: "abc123", rawModels, parameterizedModels });
+
+    const cached = JSON.parse(readFileSync(join(cacheDir, "cursor", "models.json"), "utf8"));
+    expect(cached.rawModels).toHaveLength(1);
   });
 
   it("ignores an empty catalog rather than caching a bad discovery", () => {
@@ -115,7 +128,7 @@ describe("model catalog cache", () => {
 
   it("rejects a catalog written by an older cache version", () => {
     writeFileSync(
-      join(cacheDir, "model-catalog.json"),
+      join(cacheDir, "models.json"),
       JSON.stringify({
         version: 0,
         tokenHash: "x",
@@ -130,7 +143,7 @@ describe("model catalog cache", () => {
 
   it("rejects a catalog older than the max age", () => {
     writeFileSync(
-      join(cacheDir, "model-catalog.json"),
+      join(cacheDir, "models.json"),
       JSON.stringify({
         version: 1,
         tokenHash: "x",
@@ -144,12 +157,12 @@ describe("model catalog cache", () => {
   });
 
   it("survives a corrupt cache file", () => {
-    writeFileSync(join(cacheDir, "model-catalog.json"), "{not json");
+    writeFileSync(join(cacheDir, "models.json"), "{not json");
     resetCatalogCacheForTests();
     expect(readCachedCatalog()).toBeUndefined();
   });
 
-  it("returns the cached catalog without awaiting live discovery during startup", async () => {
+  it("registers the cached catalog without awaiting live discovery during startup", () => {
     writeCachedCatalog({ tokenHash: "abc123", rawModels, parameterizedModels });
     let providerConfig: ProviderConfig | undefined;
     const pi = {
@@ -159,19 +172,33 @@ describe("model catalog cache", () => {
         providerConfig = config;
       },
     } as unknown as ExtensionAPI;
-    await cursorExtension(pi);
-    const refreshModels = providerConfig?.refreshModels?.bind(providerConfig);
-    expect(refreshModels).toBeTypeOf("function");
 
     const startedAt = performance.now();
-    const models = await refreshModels!({
-      allowNetwork: true,
-      force: false,
-      signal: new AbortController().signal,
-      publish: async () => true,
-    } satisfies RefreshModelsContext);
+    cursorExtension(pi);
 
-    expect(models.length).toBeGreaterThan(0);
+    expect(providerConfig?.models?.length).toBeGreaterThan(0);
     expect(performance.now() - startedAt).toBeLessThan(250);
+  });
+
+  it("starts model fetching without blocking session startup", async () => {
+    let sessionStart: ((event: unknown, ctx: any) => void) | undefined;
+    let finishRefresh!: (value: { errors: Map<string, Error> }) => void;
+    const pending = new Promise<{ errors: Map<string, Error> }>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const pi = {
+      on(event: string, handler: (event: unknown, ctx: any) => void) {
+        if (event === "session_start") sessionStart = handler;
+      },
+      registerCommand() {},
+      registerProvider() {},
+    } as unknown as ExtensionAPI;
+    cursorExtension(pi);
+
+    const returned = sessionStart?.({}, { modelRegistry: { refresh: () => pending } });
+    expect(returned).toBeUndefined();
+
+    finishRefresh({ errors: new Map() });
+    await pending;
   });
 });

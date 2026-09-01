@@ -520,6 +520,29 @@ describe("idle HTTP/2 bridge reuse", () => {
     setBridgeFactoryForTests();
   });
 
+  it("uses the model baseUrl when opening a new bridge", () => {
+    let openedUrl: string | undefined;
+    const handle = {
+      proc: { kill: () => true },
+      alive: true,
+      lastStderr: () => "",
+      write: () => {},
+      end: () => {},
+      onData: () => {},
+      onClose: () => {},
+    };
+    setBridgeFactoryForTests((options) => {
+      openedUrl = options.url;
+      return handle;
+    });
+
+    const routedUrl = "http://localhost:8788/route_to/https://agentn.us.api5.cursor.sh";
+    const started = startBridge("token", new Uint8Array([1]), { url: routedUrl });
+    clearInterval(started.heartbeatTimer);
+
+    expect(openedUrl).toBe(routedUrl);
+  });
+
   it("reopens a parked persistent bridge instead of spawning a new process", () => {
     const spawned: string[] = [];
     const opens: string[] = [];

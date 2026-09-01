@@ -2013,6 +2013,7 @@ function startNativeStreamWithIdleRetries(input: NativeStreamAttemptInput): void
         latestAccessToken = accessToken;
         const { bridge, heartbeatTimer } = startBridge(accessToken, requestBytes, {
           bridgeKey: input.bridgeKey,
+          url: input.model.baseUrl,
         });
         writeNativeStream(
           bridge,

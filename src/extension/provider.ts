@@ -34,9 +34,6 @@ import { debugExtensionLog } from "./debug-hooks.js";
 import { getStartupCursorAccessToken } from "./auth.js";
 import { ProviderConstant, CredentialSource } from "../types/enums.js";
 
-export const STARTUP_CATALOG_FRESH_MS = 6 * 60 * 60 * 1000;
-export const BACKGROUND_CATALOG_REFRESH_TIMEOUT_MS = 20_000;
-
 export interface ProviderRegistrationContext {
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string>;
   setCurrentToken: (token: string, source: CredentialSource) => void;
@@ -44,19 +41,17 @@ export interface ProviderRegistrationContext {
 }
 
 export function loadStartupCatalog(): CursorCatalog {
-  if (!process.env.PI_OFFLINE) {
-    const cached = readCachedCatalog();
-    if (cached) {
-      debugExtensionLog("model_discovery.startup.cached", {
-        rawCount: cached.rawModels.length,
-        parameterizedCount: cached.parameterizedModels.length,
-        ageMs: Date.now() - cached.savedAt,
-      });
-      return {
-        rawModels: cached.rawModels.length > 0 ? cached.rawModels : FALLBACK_MODELS,
-        parameterizedModels: cached.parameterizedModels,
-      };
-    }
+  const cached = readCachedCatalog();
+  if (cached) {
+    debugExtensionLog("model_discovery.startup.cached", {
+      rawCount: cached.rawModels.length,
+      parameterizedCount: cached.parameterizedModels.length,
+      ageMs: Date.now() - cached.savedAt,
+    });
+    return {
+      rawModels: cached.rawModels.length > 0 ? cached.rawModels : FALLBACK_MODELS,
+      parameterizedModels: cached.parameterizedModels,
+    };
   }
   return { rawModels: FALLBACK_MODELS, parameterizedModels: [] };
 }
@@ -122,7 +117,6 @@ export function createProviderManager(
   let noReasoningEffortByModelId = new Map<string, string>();
   let rawModelByEffortByModelId = new Map<string, Record<string, CursorModelRouting>>();
   let lastRegisteredModels: ProcessedModel[] = [];
-  let catalogRefreshInFlight: Promise<void> | undefined;
 
   const skipDedup = Boolean(process.env.PI_CURSOR_RAW_MODELS);
 
@@ -145,24 +139,6 @@ export function createProviderManager(
     noReasoningEffortByModelId = buildNoReasoningEffortLookup(processed);
     rawModelByEffortByModelId = buildRawModelLookup(processed);
     return processed;
-  }
-
-  function scheduleCatalogRefresh(): void {
-    if (catalogRefreshInFlight || process.env.PI_OFFLINE) return;
-    const signal = AbortSignal.timeout(BACKGROUND_CATALOG_REFRESH_TIMEOUT_MS);
-    catalogRefreshInFlight = refreshCatalogFromNetwork(context.setCurrentToken, { signal })
-      .then((catalog) => {
-        if (!catalog) return;
-        register(catalog.rawModels, catalog.parameterizedModels);
-      })
-      .catch((err) => {
-        debugExtensionLog("model_discovery.background.failed", {
-          message: err instanceof Error ? err.message : String(err),
-        });
-      })
-      .finally(() => {
-        catalogRefreshInFlight = undefined;
-      });
   }
 
   function register(
@@ -200,13 +176,6 @@ export function createProviderManager(
         if (!refreshContext.allowNetwork || refreshContext.signal?.aborted) {
           return lastRegisteredModels.map(modelConfig);
         }
-        if (!refreshContext.force) {
-          const cached = readCachedCatalog();
-          if (!cached || Date.now() - cached.savedAt > STARTUP_CATALOG_FRESH_MS) {
-            scheduleCatalogRefresh();
-          }
-          return lastRegisteredModels.map(modelConfig);
-        }
         const catalog = await refreshCatalogFromNetwork(context.setCurrentToken, {
           signal: refreshContext.signal,
         });
@@ -223,14 +192,6 @@ export function createProviderManager(
           const { accessToken, refreshToken } = await pollCursorAuth(uuid, verifier);
           context.setCurrentToken(accessToken, CredentialSource.PiOAuth);
 
-          const catalog = await discoverCursorCatalog(accessToken);
-          if (catalog.rawModels.length > 0 || catalog.parameterizedModels.length > 0) {
-            register(
-              catalog.rawModels.length > 0 ? catalog.rawModels : FALLBACK_MODELS,
-              catalog.parameterizedModels,
-            );
-          }
-
           return {
             refresh: refreshToken,
             access: accessToken,
@@ -241,14 +202,6 @@ export function createProviderManager(
         async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
           const refreshed = await refreshCursorToken(credentials.refresh);
           context.setCurrentToken(refreshed.access, CredentialSource.PiOAuthRefresh);
-
-          const catalog = await discoverCursorCatalog(refreshed.access);
-          if (catalog.rawModels.length > 0 || catalog.parameterizedModels.length > 0) {
-            register(
-              catalog.rawModels.length > 0 ? catalog.rawModels : FALLBACK_MODELS,
-              catalog.parameterizedModels,
-            );
-          }
 
           return refreshed as OAuthCredentials;
         },
