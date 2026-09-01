@@ -172,11 +172,11 @@ export default function (pi: ExtensionAPI): void {
       .then((result) => {
         const error = result.errors.get(ProviderConstant.ProviderId);
         if (error) {
-          debugExtensionLog("model_discovery.background.failed", { message: error.message });
+          debugExtensionLog("model_discovery.session_refresh.failed", { message: error.message });
         }
       })
       .catch((error) => {
-        debugExtensionLog("model_discovery.background.failed", {
+        debugExtensionLog("model_discovery.session_refresh.failed", {
           message: error instanceof Error ? error.message : String(error),
         });
       });

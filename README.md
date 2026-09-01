@@ -189,6 +189,24 @@ Pi Coding Agent  →  streamSimple (cursor-native)
 Everything below is optional — `pi-cursor` works out of the box. These environment variables exist
 for tuning timeouts, debugging, and edge-case overrides.
 
+To route chat inference through a local proxy, add this to `~/.pi/agent/models.json`:
+
+```json
+{
+  "providers": {
+    "cursor": {
+      "baseUrl": "http://localhost:8788",
+      "routeMarker": "route_to"
+    }
+  }
+}
+```
+
+This produces `http://localhost:8788/route_to/https://agentn.us.api5.cursor.sh` for chat
+streams. Catalog discovery and usage remain direct; `PI_CURSOR_AGENT_URL` overrides this route.
+Restart Pi after changing the route. For token safety, plaintext proxy URLs are accepted only on
+loopback; LAN/tunnel proxies are rejected.
+
 <details>
 <summary><strong>Full environment variable reference</strong></summary>
 
@@ -203,7 +221,7 @@ for tuning timeouts, debugging, and edge-case overrides.
 | `PI_CURSOR_LIFECYCLE_LOG`                  | Always-on compact lifecycle log path (default: `$TMPDIR/pi-cursor-lifecycle.jsonl`).                                                                                                                                                                                                                                                                                                                                 |
 | `CURSOR_USAGE_SESSION_TOKEN`               | Optional `WorkosCursorSessionToken` fallback cookie for `/cursor.usage`.                                                                                                                                                                                                                                                                                                                                             |
 | `PI_OFFLINE`                               | Skip live model discovery entirely; use the cached catalog or bundled fallback.                                                                                                                                                                                                                                                                                                                                      |
-| `PI_CURSOR_CACHE_DIR`                      | Where the model catalog and refresh back-off are cached (default: `getAgentDir()/cursor`, normally `~/.pi/agent/cursor`). Delete it to force a full rediscovery.                                                                                                                                                                                                                                                     |
+| `PI_CURSOR_CACHE_DIR`                      | Where the model catalog and refresh back-off are cached (default: `getAgentDir()/cursor`, normally `~/.pi/agent/cursor`). Delete only its `models.json` to force a full rediscovery.                                                                                                                                                                                                                                 |
 | `PI_CURSOR_UNARY_BRIDGE`                   | `1` forces unary RPCs (model discovery) through the general-purpose bridge transport instead of the dedicated one-shot in-process HTTP/2 client. Diagnostic escape hatch.                                                                                                                                                                                                                                            |
 | `PI_CURSOR_STREAM_IDLE_TIMEOUT_MS`         | Silence safety net: ms with **no upstream work** before recover/retry/error. **Default `180000` (3 min)**; `0` disables (turns run unbounded). Text/thinking/token deltas, tool-call events, and answered execs/queries reset it; heartbeats only prove the socket and do not hide an unanswered exec. It is paused during tool execution. On timeout, recovery continues from checkpoint even after partial output. |
 | `PI_CURSOR_RESUME_IDLE_TIMEOUT_MS`         | Same silence safety net after tool-result resume. **Default `180000` (3 min)**; `0` disables.                                                                                                                                                                                                                                                                                                                        |
@@ -253,7 +271,7 @@ used to sit alongside it was removed in favour of a single code path.
 ### Startup
 
 Extension activation does no network and no credential lookup. Models are registered
-synchronously from `getAgentDir()/cursor/models.json` (or `PI_CURSOR_CACHE_DIR`), falling back
+synchronously from `getAgentDir()/cursor/models.json` (or `$PI_CURSOR_CACHE_DIR/models.json`), falling back
 to the catalog bundled in `src/models/catalog.json` on a first-ever launch. Live discovery runs
 through pi's `refreshModels` hook — off the critical path, in the background, and again
 whenever `/model` is opened — then persists its result for the next launch.
@@ -280,7 +298,7 @@ layer. Never hand-edit it — regenerate with `bun run proto:gen` (see
 - **Tool continuation lost:** The provider now prefers full-history rebuild when checkpoints are stale/mismatched. If recovery still skips, `/cursor.doctor` shows `lastRecoverySkipReason`. Retry the turn or start a new chat.
 - **WSL credential detection:** Set `USERPROFILE` or `USERNAME` so the Windows home directory is known, and ensure `/mnt/c/Users/<you>/AppData/...` is readable. Disable with `PI_CURSOR_SYSTEM_CREDENTIALS=0` if undesired.
 - **Slow startup:** Activation should be a few milliseconds. `/cursor.doctor` reports `catalogCache` (`none(using bundled fallback)` means every launch is starting cold — check that `catalogCacheDir` is writable) and `unaryTransport`. A stale Cursor CLI keychain entry no longer blocks startup: a refresh token that fails is remembered for 10 minutes so it is not retried on the next launch, and any valid locally stored token is always preferred over a network exchange.
-- **Model list looks stale:** It is the last successfully discovered catalog. Open `/model` to trigger a background refresh, or delete `~/.pi/agent/cursor/models.json` (or `PI_CURSOR_CACHE_DIR`) to force full rediscovery.
+- **Model list looks stale:** It is the last successfully discovered catalog. Open `/model` to trigger a background refresh, or delete `~/.pi/agent/cursor/models.json` (or `$PI_CURSOR_CACHE_DIR/models.json`) to force full rediscovery.
 
 ## Runtime
 

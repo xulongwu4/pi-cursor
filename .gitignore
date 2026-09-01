@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .pi-subagents/
+.pi/
 *.log
 .DS_Store
 

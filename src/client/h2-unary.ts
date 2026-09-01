@@ -12,6 +12,7 @@ import http2 from "node:http2";
 import { randomUUID } from "node:crypto";
 
 import { getCursorClientVersion } from "../config/index.js";
+import { resolveH2Target } from "./h2-url.js";
 
 const CURSOR_API_URL = "https://api2.cursor.sh";
 export const MAX_UNARY_RESPONSE_BYTES = 16 * 1024 * 1024;
@@ -44,7 +45,7 @@ export function supportsInProcessH2(): boolean {
  * the status for the caller to interpret.
  */
 export function callUnaryOverH2(options: UnaryH2Options): Promise<UnaryH2Result> {
-  const origin = options.url ?? CURSOR_API_URL;
+  const target = resolveH2Target(options.url ?? CURSOR_API_URL, options.rpcPath);
   const timeoutMs = options.timeoutMs ?? 15_000;
 
   return new Promise<UnaryH2Result>((resolve, reject) => {
@@ -100,7 +101,7 @@ export function callUnaryOverH2(options: UnaryH2Options): Promise<UnaryH2Result>
     }
 
     try {
-      session = http2.connect(origin);
+      session = http2.connect(target.origin);
     } catch (err) {
       fail(err instanceof Error ? err : new Error(String(err)));
       return;
@@ -110,7 +111,7 @@ export function callUnaryOverH2(options: UnaryH2Options): Promise<UnaryH2Result>
 
     const request = session.request({
       ":method": "POST",
-      ":path": options.rpcPath,
+      ":path": target.path,
       // Unary uses raw protobuf, matching the h2-bridge's `unary: true` mode.
       "content-type": "application/proto",
       "connect-protocol-version": "1",

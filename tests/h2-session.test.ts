@@ -6,6 +6,7 @@ import {
   MAX_BRIDGE_MESSAGE_BYTES,
   parseConnectEndStream,
 } from "../src/client/bridge.js";
+import { resolveH2Target } from "../src/client/h2-url.js";
 import {
   __testInternals,
   describeH2TransportError,
@@ -33,7 +34,7 @@ function fakeStream(): H2Stream & { emit: EventEmitter["emit"] } {
   return stream as unknown as H2Stream & { emit: EventEmitter["emit"] };
 }
 
-function sessionHarness(options: { persistent?: boolean; unary?: boolean } = {}) {
+function sessionHarness(options: { persistent?: boolean; unary?: boolean; url?: string } = {}) {
   const requestHeaders: Record<string, unknown>[] = [];
   const streams: ReturnType<typeof fakeStream>[] = [];
   const emitter = new EventEmitter();
@@ -90,6 +91,20 @@ describe("describeH2TransportError", () => {
   });
 });
 
+describe("resolveH2Target", () => {
+  it("normalizes path-less, trailing-slash, and relative RPC paths", () => {
+    expect(resolveH2Target("https://cursor.sh", "/rpc")).toEqual({
+      origin: "https://cursor.sh",
+      path: "/rpc",
+    });
+    expect(resolveH2Target("http://localhost:8788/route/", "/rpc")).toEqual({
+      origin: "http://localhost:8788",
+      path: "/route/rpc",
+    });
+    expect(resolveH2Target("http://localhost:8788/route", "rpc").path).toBe("/route/rpc");
+  });
+});
+
 describe("in-process h2 session bridge", () => {
   it("opens the Connect stream with the expected request headers", () => {
     const { requestHeaders } = sessionHarness();
@@ -98,6 +113,16 @@ describe("in-process h2 session bridge", () => {
     expect(headers[":path"]).toBe("/agent.v1.AgentService/Run");
     expect(headers["content-type"]).toBe("application/connect+proto");
     expect(headers.authorization).toBe("Bearer token-1");
+  });
+
+  it("prefixes the RPC path with the configured route path", () => {
+    const { requestHeaders } = sessionHarness({
+      url: "http://localhost:8788/route_to/https://agentn.us.api5.cursor.sh",
+    });
+
+    expect(requestHeaders[0]![":path"]).toBe(
+      "/route_to/https://agentn.us.api5.cursor.sh/agent.v1.AgentService/Run",
+    );
   });
 
   it("delivers a retriable end-stream frame and closes with exit code 2 on GOAWAY", () => {

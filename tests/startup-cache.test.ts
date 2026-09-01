@@ -104,6 +104,19 @@ describe("model catalog cache", () => {
     expect(cached?.tokenHash).toBe("abc123");
   });
 
+  it("overwrites the cache with the latest successful catalog", () => {
+    writeCachedCatalog({ tokenHash: "old", rawModels, parameterizedModels });
+    writeCachedCatalog({
+      tokenHash: "new",
+      rawModels: [{ ...rawModels[0]!, id: "dynamic-model", name: "Dynamic Model" }],
+      parameterizedModels: [],
+    });
+    resetCatalogCacheForTests();
+
+    expect(readCachedCatalog()?.tokenHash).toBe("new");
+    expect(readCachedCatalog()?.rawModels.map((model) => model.id)).toEqual(["dynamic-model"]);
+  });
+
   it("uses the bundled model list when nothing is cached", () => {
     expect(readCachedCatalog()).toBeUndefined();
     expect(loadStartupCatalog().rawModels).toEqual(FALLBACK_MODELS);

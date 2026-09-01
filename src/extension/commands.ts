@@ -7,7 +7,11 @@ import { getLastDiagnostics } from "../diagnostics/diagnostics.js";
 import { formatDriftSummary, getDriftSignals, hasStrandingDrift } from "../stream/drift.js";
 import { readCachedCatalog } from "../stream/model-cache.js";
 import { getCacheDir } from "../utils/cache-dir.js";
-import { getCursorAgentUrl, getCursorClientVersion } from "../stream/config.js";
+import {
+  getCursorAgentUrl,
+  getCursorClientVersion,
+  getCursorInferenceUrl,
+} from "../stream/config.js";
 import { resolveSystemCredentialPolicy } from "../auth/consent.js";
 import { getLifecycleLogPath } from "../stream/debug-log.js";
 import { redactSecrets } from "../utils/security.js";
@@ -46,7 +50,7 @@ export function registerCursorCommands(pi: ExtensionAPI, options: CursorCommandO
       const rows = all ? registered : registered.filter((m) => !/tab_|chat_/i.test(m.id));
       const lines = [
         `Cursor models (${rows.length}${all ? " all" : ""})`,
-        `endpoint=${getCursorAgentUrl()}`,
+        `endpoint=${getCursorInferenceUrl()}`,
         "",
       ];
       const maxId = Math.max(8, ...rows.map((m) => m.id.length));
@@ -99,7 +103,8 @@ export function registerCursorCommands(pi: ExtensionAPI, options: CursorCommandO
 
       const lines = [
         `provider=${ProviderConstant.ProviderId}`,
-        `agentUrl=${getCursorAgentUrl()}`,
+        `agentUrl=${getCursorInferenceUrl()}`,
+        `catalogUrl=${getCursorAgentUrl()}`,
         `clientVersion=${d.clientVersion || getCursorClientVersion()}`,
         `tokenSource=${d.tokenSource || currentTokenSource || "none"}`,
         `systemCredentials=${d.systemCredentials || resolveSystemCredentialPolicy()}`,

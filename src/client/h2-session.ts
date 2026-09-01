@@ -22,6 +22,7 @@ import http2 from "node:http2";
 import { randomUUID } from "node:crypto";
 
 import { getCursorClientVersion } from "../config/index.js";
+import { resolveH2Target } from "./h2-url.js";
 import { ConnectFlag } from "../types/enums.js";
 import {
   MAX_BRIDGE_MESSAGE_BYTES,
@@ -125,7 +126,7 @@ export function createBridgeHandleForSession(
   debugLog: BridgeDebugLog,
 ): BridgeHandle {
   const baseUrl = options.url ?? CURSOR_API_URL;
-  const rpcPath = options.rpcPath;
+  const { path: rpcPath } = resolveH2Target(baseUrl, options.rpcPath);
   const unary = options.unary ?? false;
   const persistent = unary ? false : options.persistent === true;
   const connectTimeoutMs = optionalMs(options.connectTimeoutMs, 30_000);
@@ -466,7 +467,9 @@ export function createInProcessBridge(
   debugLog: BridgeDebugLog,
 ): BridgeHandle {
   const baseUrl = options.url ?? CURSOR_API_URL;
-  const session = http2.connect(baseUrl) as unknown as H2Session;
+  const { origin } = resolveH2Target(baseUrl, options.rpcPath);
+  const session = http2.connect(origin) as unknown as H2Session;
+  // The injected-session seam derives the request path from this same immutable options.url.
   return createBridgeHandleForSession(session, options, debugLog);
 }
 
