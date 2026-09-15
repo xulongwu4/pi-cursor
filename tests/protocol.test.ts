@@ -22,6 +22,12 @@ describe("protocol helpers", () => {
     expect(proto).toMatch(/PI_CURSOR_CLIENT_VERSION/);
   });
 
+  it("does not misclassify rate limits as protocol drift", () => {
+    const out = enhanceCursorStreamError("Connect error resource_exhausted: quota exceeded");
+    expect(out).toMatch(/rate-limit/);
+    expect(out).not.toMatch(/protocol-hint/);
+  });
+
   it("parses connect end-stream errors", () => {
     const err = parseConnectEndStream(
       new TextEncoder().encode(JSON.stringify({ error: { code: "internal", message: "boom" } })),

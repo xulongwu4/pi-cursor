@@ -48,7 +48,15 @@ export function appendDriftDiagnostic(message: string): string {
   );
 }
 
+const RATE_LIMIT_RE = /\b(429|resource_exhausted|rate[_ ]?limit|too many requests)\b/i;
+
 export function enhanceCursorStreamError(message: string): string {
+  if (RATE_LIMIT_RE.test(message)) {
+    return (
+      `${message} ` +
+      `[rate-limit: Cursor quota exhausted on this account/plan. Wait and retry; check /cursor.usage for remaining quota.]`
+    );
+  }
   if (isAuthErrorMessage(message)) {
     return (
       `${message} ` +
