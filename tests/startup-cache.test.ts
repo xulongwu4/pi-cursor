@@ -37,6 +37,7 @@ afterEach(() => {
   unregisterApiProviders("@rahularya01/pi-cursor");
   delete process.env.PI_CURSOR_CACHE_DIR;
   delete process.env.PI_CODING_AGENT_DIR;
+  delete process.env.XDG_CACHE_HOME;
   resetCacheDirForTests();
   resetRefreshGuardForTests();
   resetCatalogCacheForTests();
@@ -122,7 +123,7 @@ describe("model catalog cache", () => {
     expect(loadStartupCatalog().rawModels).toEqual(FALLBACK_MODELS);
   });
 
-  it("defaults the cache to getAgentDir()/cursor/models.json", () => {
+  it("defaults the model cache to getAgentDir()/cursor/models.json", () => {
     delete process.env.PI_CURSOR_CACHE_DIR;
     process.env.PI_CODING_AGENT_DIR = cacheDir;
     resetCacheDirForTests();

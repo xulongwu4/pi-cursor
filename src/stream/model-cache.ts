@@ -14,11 +14,10 @@
  */
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
-import { cacheFilePath } from "../utils/cache-dir.js";
+import { getCatalogCacheFilePath } from "../utils/cache-dir.js";
 import type { CursorParameterizedModel } from "../client/cursor-wire.js";
 import type { CursorModel } from "./model-discovery.js";
 
-const CACHE_FILE = "models.json";
 const CACHE_VERSION = 1;
 
 /** Discard a persisted catalog older than this rather than serving something ancient. */
@@ -42,7 +41,7 @@ let memoized: CachedCatalog | null | undefined;
 export function readCachedCatalog(): CachedCatalog | undefined {
   if (memoized !== undefined) return memoized ?? undefined;
   memoized = null;
-  const path = cacheFilePath(CACHE_FILE);
+  const path = getCatalogCacheFilePath();
   if (!path) return undefined;
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<CachedCatalog>;
@@ -85,7 +84,7 @@ export function writeCachedCatalog(entry: {
     parameterizedModels: entry.parameterizedModels,
   };
   memoized = catalog;
-  const path = cacheFilePath(CACHE_FILE);
+  const path = getCatalogCacheFilePath();
   if (!path) return;
   try {
     writeFileSync(path, JSON.stringify(catalog), { mode: 0o600 });
