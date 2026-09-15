@@ -49,6 +49,33 @@ function parseTokenResponse(
   };
 }
 
+/**
+ * True for a Cursor session JWT, which `exchange_user_api_key` cannot exchange.
+ *
+ * That endpoint takes a Cursor *user API key* and hands back a session token.
+ * But `/auth/poll` reports the session token in its own `refreshToken` field
+ * (routinely byte-identical to `accessToken`), and the Cursor CLI has been seen
+ * mirroring an access token into its `cursor-refresh-token` keychain entry.
+ * Posting either one back always answers 401 "Invalid User API Key", so
+ * recognise it locally instead of spending ~2.6s on the startup path to be told
+ * the same thing — and report something the user can act on.
+ *
+ * Only JWTs claiming `type: "session"` are rejected. A real user API key is not
+ * a JWT, so it still takes the network path.
+ */
+export function isCursorSessionToken(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3 || !parts[1]) return false;
+  try {
+    const payload: unknown = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return (
+      !!payload && typeof payload === "object" && (payload as { type?: unknown }).type === "session"
+    );
+  } catch {
+    return false;
+  }
+}
+
 // ── PKCE ──
 
 async function generatePKCE(): Promise<{ verifier: string; challenge: string }> {
@@ -185,6 +212,12 @@ export function createCursorAuthClient(deps: CursorAuthClientDependencies = {}) 
     refreshToken: string,
     options?: { signal?: AbortSignal },
   ): Promise<CursorCredentials> {
+    if (isCursorSessionToken(refreshToken)) {
+      throw new Error(
+        "Cursor issued a session token, which cannot be exchanged for a new one — run /login cursor to sign in again",
+      );
+    }
+
     const response = await fetchImpl(CURSOR_REFRESH_URL, {
       method: "POST",
       headers: {

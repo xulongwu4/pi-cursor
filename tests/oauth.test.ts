@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "bun:test";
 
-import { createCursorAuthClient } from "../src/auth/oauth.js";
+import { createCursorAuthClient, isCursorSessionToken } from "../src/auth/oauth.js";
+
+function sessionJwt(payload: Record<string, unknown> = {}): string {
+  const body = Buffer.from(JSON.stringify({ type: "session", ...payload })).toString("base64url");
+  return `header.${body}.signature`;
+}
 
 describe("Cursor OAuth transport", () => {
   it("honors cancellation before polling starts", async () => {
@@ -57,6 +62,39 @@ describe("Cursor OAuth transport", () => {
       ) as unknown as unknown as typeof fetch,
     });
     await expect(client.refreshToken("refresh-token")).rejects.toThrow(/no access token/);
+  });
+
+  it("rejects a session token without touching the network", async () => {
+    const fetchMock = vi.fn();
+    const client = createCursorAuthClient({
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    await expect(client.refreshToken(sessionJwt())).rejects.toThrow(/\/login cursor/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still exchanges a user API key, which is not a JWT", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ accessToken: sessionJwt({ exp: 1 }) })),
+    );
+    const client = createCursorAuthClient({
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    const credentials = await client.refreshToken("key_abc123");
+
+    expect(credentials.refresh).toBe("key_abc123");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies tokens by the session claim, not by shape", () => {
+    expect(isCursorSessionToken(sessionJwt())).toBe(true);
+    // A JWT that is not a session token must keep the network path.
+    expect(isCursorSessionToken(sessionJwt({ type: "api-key" }))).toBe(false);
+    expect(isCursorSessionToken("key_abc123")).toBe(false);
+    expect(isCursorSessionToken("not.a.jwt")).toBe(false);
+    expect(isCursorSessionToken("")).toBe(false);
   });
 
   it("redacts refresh error bodies", async () => {
