@@ -5,6 +5,7 @@
 import type { CursorModel } from "../stream/model-discovery.js";
 import type { CursorNativeModelRouting } from "../stream/model-routing.js";
 import { estimateModelCost } from "./cost.js";
+import { observedContextWindow } from "./limits.js";
 import { ProviderConstant, type PiThinkingLevel } from "../types/enums.js";
 
 export type CursorModelRouting = CursorNativeModelRouting;
@@ -303,7 +304,10 @@ export function modelConfig(m: ProcessedModel) {
       }),
     input,
     cost: estimateModelCost(m.id),
-    contextWindow: m.contextWindow,
+    // Every catalog row (live, parameterized, bundled fallback) funnels through
+    // here, so this is the one place a window Cursor actually enforced can
+    // override the id/name guess for all of them.
+    contextWindow: observedContextWindow(m.id) ?? m.contextWindow,
     maxTokens: m.maxTokens,
   };
 }

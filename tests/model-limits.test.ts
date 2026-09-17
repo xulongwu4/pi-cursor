@@ -1,9 +1,16 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   inferCursorContextWindow,
   inferCursorMaxOutputTokens,
+  observedContextWindow,
+  recordObservedContextWindow,
+  resetObservedContextWindowsForTests,
 } from "../src/models/limits.js";
+import { resetCacheDirForTests } from "../src/utils/cache-dir.js";
 import { FALLBACK_MODELS } from "../src/models/parameterized.js";
 
 describe("inferCursorContextWindow", () => {
@@ -62,5 +69,46 @@ describe("bundled fallback catalog", () => {
     const oneMillion = FALLBACK_MODELS.filter((m) => /\b1M\b/.test(m.name));
     expect(oneMillion.length).toBeGreaterThan(0);
     for (const model of oneMillion) expect(model.contextWindow).toBe(1_000_000);
+  });
+});
+
+describe("observed context windows", () => {
+  const previousCacheDir = process.env.PI_CURSOR_CACHE_DIR;
+
+  function useTempCacheDir(): void {
+    process.env.PI_CURSOR_CACHE_DIR = mkdtempSync(join(tmpdir(), "pi-cursor-windows-"));
+    resetCacheDirForTests();
+    resetObservedContextWindowsForTests();
+  }
+
+  afterAll(() => {
+    if (previousCacheDir === undefined) delete process.env.PI_CURSOR_CACHE_DIR;
+    else process.env.PI_CURSOR_CACHE_DIR = previousCacheDir;
+    resetCacheDirForTests();
+    resetObservedContextWindowsForTests();
+  });
+
+  it("survives a restart so a model is only mis-sized before its first turn", () => {
+    useTempCacheDir();
+    // The guess for this id is the 200K default; Cursor reported something else.
+    expect(inferCursorContextWindow("composer-2", "Composer 2")).toBe(200_000);
+    recordObservedContextWindow("composer-2", 123_456);
+
+    // Drop the in-memory map: a later process must read the value back off disk.
+    resetObservedContextWindowsForTests();
+    expect(observedContextWindow("composer-2")).toBe(123_456);
+  });
+
+  it("keys variants separately and ignores values Cursor cannot have meant", () => {
+    useTempCacheDir();
+    recordObservedContextWindow("gpt-5.5-high", 272_000);
+    recordObservedContextWindow("gpt-5.5-1m-high", 1_000_000);
+    expect(observedContextWindow("gpt-5.5-high")).toBe(272_000);
+    expect(observedContextWindow("gpt-5.5-1m-high")).toBe(1_000_000);
+
+    for (const bad of [0, -1, 1.5, undefined, "272000"]) {
+      recordObservedContextWindow("composer-2", bad);
+    }
+    expect(observedContextWindow("composer-2")).toBeUndefined();
   });
 });

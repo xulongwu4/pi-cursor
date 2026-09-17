@@ -859,7 +859,7 @@ function writeNativeStream(
   heartbeatTimer: ReturnType<typeof setInterval>,
   blobStore: Map<string, Uint8Array>,
   mcpTools: McpToolDefinition[],
-  _model: Model<Api>,
+  model: Model<Api>,
   modelId: string,
   bridgeKey: string,
   convKey: string,
@@ -895,6 +895,9 @@ function writeNativeStream(
     pendingExecs: [],
     outputTokens: 0,
     totalTokens: 0,
+    // Pi-side id, not the resolved Cursor id: variants of one base model have
+    // different windows and must not overwrite each other's observation.
+    piModelId: model.id,
     turnEnded: false,
   };
   const tagFilter = createThinkingTagFilter();

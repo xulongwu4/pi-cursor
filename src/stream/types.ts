@@ -217,6 +217,12 @@ export interface StreamState {
   pendingExecs: PendingExec[];
   outputTokens: number;
   totalTokens: number;
+  /**
+   * Pi-side model id for the running turn, used to key the context window Cursor
+   * reports on each checkpoint. Optional so test fixtures can omit it; recording
+   * is skipped when absent.
+   */
+  piModelId?: string;
   /** Set once Cursor reported `turnEnded`; a connection close after it is a completed turn. */
   turnEnded: boolean;
 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.30] - 2026-09-17
+
+### Fixed
+
+- **Model context windows are now learned from Cursor instead of guessed, so the picker stops reporting 200K for every model.** Cursor's `GetUsableModels` response carries no context-size field, so `inferCursorContextWindow()` could only regex `1M` / `272K` out of a model's id and display name and fell back to 200K for everything else. The real limit was already arriving on the wire and being discarded: `ConversationTokenDetails.max_tokens`, delivered with every `conversation_checkpoint_update`, of which only `used_tokens` was being read. It is now recorded per model and preferred over the guess from that model's first turn onward.
+
+### Internal
+
+- `src/models/limits.ts` gained a small persisted store (`context-windows.json` in the pi-cursor cache dir) keyed by the **pi-side** model id rather than the resolved Cursor id, because max-mode and `context=1m` variants of one base model report different ceilings and must not overwrite each other. `inferCursorContextWindow()` itself stays a pure id/name heuristic and remains the cold-start value.
+- The override is applied in `modelConfig()` (`src/models/processing.ts`), the single point every catalog row — live, parameterized, and bundled fallback — passes through.
+- `StreamState` gained an optional `piModelId`, set from `model.id` in `writeNativeStream()`, which is what keys the observation.
+
 ## [1.4.29] - 2026-08-30
 
 ### Changed

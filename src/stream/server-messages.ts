@@ -63,6 +63,7 @@ import {
   type McpToolDefinition,
 } from "../proto/agent_pb.js";
 import { frameConnectMessage } from "../client/bridge.js";
+import { recordObservedContextWindow } from "../models/limits.js";
 import { debugLog, lifecycleLog } from "./debug-log.js";
 import { recordDriftSignal, recordUnknownFields } from "./drift.js";
 import { handleInteractionQuery } from "./interaction-query.js";
@@ -232,8 +233,12 @@ export function processServerMessage(
   }
   if (msgCase === "conversationCheckpointUpdate") {
     const stateStructure = msg.message.value as ConversationStateStructure;
-    if ((stateStructure as any).tokenDetails) {
-      state.totalTokens = (stateStructure as any).tokenDetails.usedTokens;
+    const tokenDetails = (stateStructure as any).tokenDetails;
+    if (tokenDetails) {
+      state.totalTokens = tokenDetails.usedTokens;
+      // `maxTokens` is the window Cursor enforced for this exact request — the only
+      // authoritative context size on the wire, since `ModelDetails` omits it.
+      recordObservedContextWindow(state.piModelId, tokenDetails.maxTokens);
     }
     if (onCheckpoint) {
       onCheckpoint(toBinary(ConversationStateStructureSchema, stateStructure));
