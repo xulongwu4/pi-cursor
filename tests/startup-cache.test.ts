@@ -123,14 +123,14 @@ describe("model catalog cache", () => {
     expect(loadStartupCatalog().rawModels).toEqual(FALLBACK_MODELS);
   });
 
-  it("defaults the model cache to getAgentDir()/cursor/models.json", () => {
+  it("defaults the model cache to $XDG_CACHE_HOME/pi/cursor/models.json", () => {
     delete process.env.PI_CURSOR_CACHE_DIR;
-    process.env.PI_CODING_AGENT_DIR = cacheDir;
+    process.env.XDG_CACHE_HOME = cacheDir;
     resetCacheDirForTests();
 
     writeCachedCatalog({ tokenHash: "abc123", rawModels, parameterizedModels });
 
-    const cached = JSON.parse(readFileSync(join(cacheDir, "cursor", "models.json"), "utf8"));
+    const cached = JSON.parse(readFileSync(join(cacheDir, "pi", "cursor", "models.json"), "utf8"));
     expect(cached.rawModels).toHaveLength(1);
   });
 

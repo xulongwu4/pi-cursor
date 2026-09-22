@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.31] - 2026-09-22
+
+### Changed
+
+- **The model catalog cache moved out of the agent dir into the XDG cache dir.** `models.json` now lives at `$XDG_CACHE_HOME/pi/cursor/models.json` (normally `~/.cache/pi/cursor/models.json`) instead of `~/.pi/agent/cursor/models.json`, alongside the refresh back-off and context-window stores. `PI_CURSOR_CACHE_DIR` still overrides the whole location; the runtime `models.json` route config and `auth.json` stay in the agent dir.
+
 ## [1.4.30] - 2026-09-17
 
 ### Fixed

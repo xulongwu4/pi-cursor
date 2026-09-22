@@ -6,7 +6,6 @@
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join as pathJoin } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 let cachedDir: string | undefined;
 
@@ -40,14 +39,19 @@ export function cacheFilePath(name: string): string | undefined {
 }
 
 /**
- * Model catalog cache stays in the agent dir (~/.pi/agent/cursor/models.json) so it
- * survives XDG cache cleanups; logs and journals live in the XDG cache dir.
+ * Model catalog cache lives in the XDG cache dir ($XDG_CACHE_HOME/pi/cursor/
+ * models.json) alongside the other derived state; PI_CURSOR_CACHE_DIR overrides.
  */
 export function getCatalogCacheFilePath(): string | undefined {
   const configured = process.env.PI_CURSOR_CACHE_DIR?.trim();
   const file = configured
     ? pathJoin(configured, "models.json")
-    : pathJoin(getAgentDir(), "cursor", "models.json");
+    : pathJoin(
+        process.env.XDG_CACHE_HOME?.trim() || pathJoin(homedir(), ".cache"),
+        "pi",
+        "cursor",
+        "models.json",
+      );
   try {
     mkdirSync(pathJoin(file, ".."), { recursive: true, mode: 0o700 });
   } catch {
