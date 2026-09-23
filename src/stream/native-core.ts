@@ -10,9 +10,9 @@ import {
   createAssistantMessageEventStream,
   type Api,
   type AssistantMessageEventStream,
-  type Context,
   type Model,
   type SimpleStreamOptions,
+  type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import {
   AgentClientMessageSchema,
@@ -392,7 +392,7 @@ export function createCursorNativeStream(
   config: CursorNativeStreamConfig,
 ): (
   model: Model<Api>,
-  context: Context,
+  context: TranscriptContext,
   options?: SimpleStreamOptions,
 ) => AssistantMessageEventStream {
   return (model, context, options) => {

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.32] - 2026-09-22
+
+### Fixed
+
+- **The provider was silently dropping the system prompt and tool declarations on Pi 0.87, so Cursor saw a bare user message.** Pi 0.87 replaced the custom-provider stream input `Context { systemPrompt, messages, tools }` with `TranscriptContext { messages }`, moving the prompt and tools into replayed system messages. `contextToCursorChatCompletionRequest()` still read `context.systemPrompt` and `context.tools`, both of which are `undefined` on a transcript, so every request went out with no instructions and `tools: []`.
+
+### Changed
+
+- **Transcript system messages are now collapsed before translation.** Cursor's wire carries a single leading system prompt, so `collapseSystemMessages()` folds later prompt deltas and tool additions into one head message, and the prompt/tools are read with `getCurrentSystemPrompt()` / `getCurrentTools()`. This also fixes an edge case in the interrupted-turn notice: an assistant message was previously judged trailing against the uncollapsed message count, so a transcript ending in a system message was mis-annotated.
+- **`@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` now require `>=0.87.0`** (peer floor) with exact `0.87.0` dev pins and an `overrides` block. Earlier versions have no transcript helpers, so the provider would fail to import at all rather than misbehave.
+
+### Internal
+
+- `parseToolCallArguments()` now declares its return type as `JsonObject`, matching the 0.87 narrowing of `ToolCall.arguments`. Its branches already returned JSON-only values, so this replaces an assertion in `stream-writer.ts` with an honest annotation.
+- `tests/interrupted-turn.test.ts` builds transcripts instead of `Context` objects, and gains a regression test asserting the system prompt and mid-transcript `toolsAdded` reach the request body.
 ## [1.4.31] - 2026-09-22
 
 ### Changed

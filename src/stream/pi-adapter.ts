@@ -9,13 +9,19 @@
 import type {
   Api,
   AssistantMessage,
-  Context,
   ImageContent as PiImageContent,
   Message as PiMessage,
   Model,
   TextContent as PiTextContent,
   Tool as PiTool,
   ToolCall as PiToolCall,
+  TranscriptContext,
+} from "@earendil-works/pi-ai";
+
+import {
+  collapseSystemMessages,
+  getCurrentSystemPrompt,
+  getCurrentTools,
 } from "@earendil-works/pi-ai";
 
 import { redactSecrets } from "../utils/security.js";
@@ -254,14 +260,18 @@ export function applyNativeCursorRouting(
 
 export function contextToCursorChatCompletionRequest(
   model: Model<Api>,
-  context: Context,
+  context: TranscriptContext,
   options: CursorNativeStreamOptions | undefined,
   config: CursorNativeStreamConfig,
 ): ChatCompletionRequest {
+  // Cursor's wire carries one leading system prompt, so fold later system
+  // messages (prompt deltas, tool additions) into it before translating.
+  const transcript = collapseSystemMessages(context);
   const messages: OpenAIMessage[] = [];
-  if (context.systemPrompt) messages.push({ role: "system", content: context.systemPrompt });
+  const systemPrompt = getCurrentSystemPrompt(transcript.messages);
+  if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
 
-  for (const [index, message] of context.messages.entries()) {
+  for (const [index, message] of transcript.messages.entries()) {
     if (message.role === "user") {
       messages.push({ role: "user", content: piContentToOpenAIContent(message.content) });
       continue;
@@ -275,7 +285,7 @@ export function contextToCursorChatCompletionRequest(
       // annotating it would turn an empty-step turn into a non-empty one and
       // strand the live user text.
       const interrupted_notice =
-        index < context.messages.length - 1 ? interruptedAssistantNotice(message) : "";
+        index < transcript.messages.length - 1 ? interruptedAssistantNotice(message) : "";
       messages.push({
         role: "assistant",
         content: assistantTextFromPiContent(message.content),
@@ -300,7 +310,7 @@ export function contextToCursorChatCompletionRequest(
     model: model.id,
     messages,
     stream: true,
-    tools: (context.tools ?? []).map(piToolToOpenAI),
+    tools: getCurrentTools(transcript.messages).map(piToolToOpenAI),
     tool_choice: options?.toolChoice,
     reasoning_effort: resolveNativeReasoningEffort(
       model,

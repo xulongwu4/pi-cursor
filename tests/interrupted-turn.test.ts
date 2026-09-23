@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { fromBinary } from "@bufbuild/protobuf";
-import type { Api, Context, Model } from "@earendil-works/pi-ai";
+import type { Api, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import {
   contextToCursorChatCompletionRequest,
   interruptedAssistantNotice,
@@ -17,8 +17,10 @@ import type { OpenAIMessage } from "../src/stream/types.js";
 
 const model = { id: "cursor-grok-4.6", api: "cursor-native", provider: "cursor" } as Model<Api>;
 
-function ctx(messages: Context["messages"]): Context {
-  return { systemPrompt: "SYS", messages, tools: [] } as unknown as Context;
+function ctx(messages: TranscriptContext["messages"]): TranscriptContext {
+  return {
+    messages: [{ role: "system", content: "SYS", timestamp: 0 }, ...messages],
+  } as unknown as TranscriptContext;
 }
 
 function assistant(content: unknown[], extra: Record<string, unknown> = {}) {
@@ -144,6 +146,43 @@ describe("contextToCursorChatCompletionRequest", () => {
     expect(assistantMsg.thinking).toContain("inspect src");
     const parsed = parseMessages(body.messages);
     expect(parsed.turns[0]!.steps.some((step) => step.kind === "thinking")).toBe(true);
+  });
+
+  it("reads the system prompt and later toolsAdded from the transcript", () => {
+    const body = contextToCursorChatCompletionRequest(
+      model,
+      {
+        messages: [
+          {
+            role: "system",
+            content: "SENTINEL-PROMPT",
+            timestamp: 0,
+            toolsAdded: [{ name: "initial_tool", description: "d", parameters: {} }],
+          },
+          { role: "user", content: [{ type: "text", text: "hi" }] },
+          {
+            role: "system",
+            content: "LATE-DELTA",
+            timestamp: 0,
+            toolsAdded: [
+              { name: "sentinel_tool", description: "added mid-transcript", parameters: {} },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "go" }] },
+        ],
+      } as never,
+      undefined,
+      config,
+    );
+
+    expect(body.messages[0]).toEqual({
+      role: "system",
+      content: "SENTINEL-PROMPT\n\nLATE-DELTA",
+    });
+    expect(body.tools?.map((tool) => tool.function.name)).toEqual([
+      "initial_tool",
+      "sentinel_tool",
+    ]);
   });
 });
 
